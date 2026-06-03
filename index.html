@@ -330,9 +330,13 @@ function renderAdmin(page){
 // ── 렌더 ──────────────────────────────────────────────
 function render(){
   var app=document.getElementById("app");
-  if(!app)return;
+  if(!app){console.log("DEBUG: app div 없음");return;}
   // 인증 체크
-  if(!S.authReady)return;
+  console.log("DEBUG render: authReady="+S.authReady+" user="+(S.user?S.user.email:"null"));
+  if(!S.authReady){
+    app.innerHTML='<div style="color:#E8C97A;text-align:center;padding:40px;">로딩 중...</div>';
+    return;
+  }
   if(!S.user){renderLogin();return;}
   while(app.firstChild)app.removeChild(app.firstChild);
 
@@ -778,6 +782,7 @@ function migrateQty(txList){
 var _fbListenersOn=false;
 if(AUTH&&DB){
   AUTH.onAuthStateChanged(function(user){
+    console.log("DEBUG onAuthStateChanged: "+(user?user.email:"로그아웃"));
     S.user=user;
     S.authReady=true;
     if(user){
