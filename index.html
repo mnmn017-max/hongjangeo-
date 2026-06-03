@@ -133,8 +133,12 @@ function getRecv(){
   S.cos.forEach(function(c){m[cs(c.id)]=0;supMap[cs(c.id)]=c.supplier||false;});
   S.txs.forEach(function(t){
     if(m[cs(t.companyId)]!==undefined){
-      // 공급업체는 부호 반전 (받은납품=줘야할돈, 준돈=미수감소)
-      m[cs(t.companyId)]+=supMap[cs(t.companyId)]?-t.amount:t.amount;
+      if(supMap[cs(t.companyId)]){
+        // 공급업체: 납품(양수)은 줘야할돈이므로 음수로, 입금(음수)은 줘야할돈 감소이므로 양수로
+        m[cs(t.companyId)]+=t.type==="납품"?-t.amount:Math.abs(t.amount);
+      }else{
+        m[cs(t.companyId)]+=t.amount;
+      }
     }
   });
   return m;
@@ -594,7 +598,10 @@ function renderCo(page,recvMap,ms){
   var comp=S.cos.find(function(c){return cs(c.id)===cs(S.cid);});
   if(!comp)return;
   var isCompSupplier=comp.supplier||false;
-  var cRecv=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid);}).reduce(function(a,t){return a+(isCompSupplier?-t.amount:t.amount);},0);
+  var cRecv=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid);}).reduce(function(a,t){
+    if(isCompSupplier)return a+(t.type==="납품"?-t.amount:Math.abs(t.amount));
+    return a+t.amount;
+  },0);
   var cSales=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.type==="납품"&&t.date&&t.date.startsWith(ms);}).reduce(function(a,t){return a+t.amount;},0);
   var recvColor=cRecv>0?"#E05C5C":cRecv<0?"#5B8DEF":"#4CAF82";
   var recvLabel=cRecv>0?fmt(cRecv):cRecv<0?fmt(Math.abs(cRecv))+" (줘야할돈)":fmt(0);
