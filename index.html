@@ -84,7 +84,8 @@ var S={
   sync:"loading", editTx:null, txF:"전체",
   imp:{show:false,mode:"normal",text:"",year:String(new Date().getFullYear()),res:null,msg:""},
   delMode:false, delTxt:"",
-  user:null, authReady:false, adminTab:0
+  user:null, authReady:false, adminTab:0,
+  _searchEl:null
 };
 var saveT=null;
 function today(){return new Date().toISOString().slice(0,10);}
@@ -520,23 +521,28 @@ function renderDash(page,recvMap,ms){
 function renderCo(page,recvMap,ms){
   var addBtn=h("button",null,{padding:"8px 14px",border:"1px solid rgba(201,168,76,0.35)",borderRadius:10,background:"transparent",color:"#E8C97A",fontWeight:500,fontSize:13},"+ 추가");
   addBtn.onclick=function(){var n=prompt("업체명 입력");if(n&&n.trim()){updCo(S.cos.concat([{id:Date.now(),name:n.trim()}]));render();}};
-  var si=inpEl("text","inp",{marginBottom:10},S.search);
-  si.placeholder="🔍 업체명 검색...";
-  si.className=(si.className||"")+" co-search";
-  si.addEventListener("compositionstart",function(){si._composing=true;});
-  si.addEventListener("compositionend",function(){
-    si._composing=false;
-    S.search=si.value;
-    var el=document.getElementById("co-list");
-    if(el)updateCoList(el,S.search);
-  });
-  si.oninput=function(){
-    if(si._composing)return;
-    S.search=si.value;
-    var el=document.getElementById("co-list");
-    if(el)updateCoList(el,S.search);
-  };
-  si.onkeydown=function(e){e.stopPropagation();};
+  // 검색 input: 한 번만 생성 후 재사용 (한글 조합 끊김 방지)
+  if(!S._searchEl){
+    var si=inpEl("text","inp",{marginBottom:10},"");
+    si.placeholder="🔍 업체명 검색...";
+    si.addEventListener("compositionstart",function(){si._composing=true;});
+    si.addEventListener("compositionend",function(){
+      si._composing=false;
+      S.search=si.value;
+      var el=document.getElementById("co-list");
+      if(el)updateCoList(el,S.search);
+    });
+    si.oninput=function(){
+      if(si._composing)return;
+      S.search=si.value;
+      var el=document.getElementById("co-list");
+      if(el)updateCoList(el,S.search);
+    };
+    si.onkeydown=function(e){e.stopPropagation();};
+    S._searchEl=si;
+  }
+  var si=S._searchEl;
+  si.value=S.search;
 
   function makeCoItems(q){
     var filtered=S.cos.filter(function(c){return c.name&&c.name.includes(q);});
@@ -587,11 +593,11 @@ function renderCo(page,recvMap,ms){
   if(!S.cid)return;
   var comp=S.cos.find(function(c){return cs(c.id)===cs(S.cid);});
   if(!comp)return;
-  var cRecv=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid);}).reduce(function(a,t){return a+t.amount;},0);
+  var isCompSupplier=comp.supplier||false;
+  var cRecv=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid);}).reduce(function(a,t){return a+(isCompSupplier?-t.amount:t.amount);},0);
   var cSales=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.type==="납품"&&t.date&&t.date.startsWith(ms);}).reduce(function(a,t){return a+t.amount;},0);
   var recvColor=cRecv>0?"#E05C5C":cRecv<0?"#5B8DEF":"#4CAF82";
   var recvLabel=cRecv>0?fmt(cRecv):cRecv<0?fmt(Math.abs(cRecv))+" (줘야할돈)":fmt(0);
-  var isCompSupplier=comp.supplier||false;
   page.appendChild(d("card-gold",null,[
     d(null,{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},[
       t("sec-title",{margin:0},comp.name),
