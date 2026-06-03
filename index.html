@@ -598,10 +598,20 @@ function renderCo(page,recvMap,ms){
   var comp=S.cos.find(function(c){return cs(c.id)===cs(S.cid);});
   if(!comp)return;
   var isCompSupplier=comp.supplier||false;
-  var cRecv=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid);}).reduce(function(a,t){
+  var compTxs=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid);});
+  var cRecv=compTxs.reduce(function(a,t){
     if(isCompSupplier)return a+(t.type==="납품"?-t.amount:Math.abs(t.amount));
     return a+t.amount;
   },0);
+  // 디버그: 콘솔에 전체 거래 출력
+  console.log("=== "+comp.name+" 전체 거래 ("+compTxs.length+"건) ===");
+  var _납품합=0,_입금합=0;
+  compTxs.forEach(function(t){
+    console.log(t.date+" "+t.type+" "+t.item+" amount:"+t.amount+" qty:"+t.qty);
+    if(t.type==="납품")_납품합+=t.amount;
+    else _입금합+=t.amount;
+  });
+  console.log("납품합계:"+_납품합+" 입금합계:"+_입금합+" 차액:"+(Math.abs(_납품합)-Math.abs(_입금합))+" cRecv:"+cRecv);
   var cSales=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.type==="납품"&&t.date&&t.date.startsWith(ms);}).reduce(function(a,t){return a+t.amount;},0);
   var recvColor=cRecv>0?"#E05C5C":cRecv<0?"#5B8DEF":"#4CAF82";
   var recvLabel=cRecv>0?fmt(cRecv):cRecv<0?fmt(Math.abs(cRecv))+" (줘야할돈)":fmt(0);
