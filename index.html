@@ -461,14 +461,14 @@ function renderDash(page,recvMap,ms){
   MONTHS.forEach(function(_,i){var b=h("span","pill"+(S.mo===i+1?" on":""));b.textContent=i+1+"월";b.onclick=function(){S.mo=i+1;render();};mp.appendChild(b);});
   page.appendChild(d("card-gold",null,[t(null,{fontSize:12,fontWeight:500,color:"#E8C97A",margin:"0 0 10px",letterSpacing:0.5},"기간 선택"),yp,mp]));
 
-  // 누적매출
-  var yTotal=S.txs.filter(function(t){return t.type==="납품"&&t.date&&t.date.startsWith(String(S.yr));}).reduce(function(a,t){return a+t.amount;},0);
+  // 누적매출 (장어+잡어 양수만)
+  var yTotal=S.txs.filter(function(t){return t.type==="납품"&&(t.item==="장어"||t.item==="잡어")&&t.date&&t.date.startsWith(String(S.yr))&&t.amount>0;}).reduce(function(a,t){return a+t.amount;},0);
   page.appendChild(d("card-gold",null,[t("sec-title",null,S.yr+"년 누적 총매출"),t(null,{fontSize:24,fontWeight:700,color:"#E8C97A",margin:0},fmt(yTotal))]));
 
-  // 월매출
-  var eelS=S.txs.filter(function(t){return t.type==="납품"&&t.item==="장어"&&t.date&&t.date.startsWith(ms);}).reduce(function(a,t){return a+t.amount;},0);
-  var fishS=S.txs.filter(function(t){return t.type==="납품"&&t.item==="잡어"&&t.date&&t.date.startsWith(ms);}).reduce(function(a,t){return a+t.amount;},0);
-  var eelKg=S.txs.filter(function(t){return t.type==="납품"&&t.item==="장어"&&t.date&&t.date.startsWith(ms);}).reduce(function(a,t){return a+t.qty;},0);
+  // 월매출 (양수값만)
+  var eelS=S.txs.filter(function(t){return t.type==="납품"&&t.item==="장어"&&t.date&&t.date.startsWith(ms)&&t.amount>0;}).reduce(function(a,t){return a+t.amount;},0);
+  var fishS=S.txs.filter(function(t){return t.type==="납품"&&t.item==="잡어"&&t.date&&t.date.startsWith(ms)&&t.amount>0;}).reduce(function(a,t){return a+t.amount;},0);
+  var eelKg=S.txs.filter(function(t){return t.type==="납품"&&t.item==="장어"&&t.date&&t.date.startsWith(ms)&&t.qty>0;}).reduce(function(a,t){return a+t.qty;},0);
   page.appendChild(d("row2",null,[
     d("mc",null,[t(null,{fontSize:11,color:"rgba(240,234,214,0.35)",margin:"0 0 4px"},S.mo+"월 장어 매출"),t(null,{fontSize:17,fontWeight:600,color:"#E8C97A",margin:0},fmt(eelS))]),
     d("mc",null,[t(null,{fontSize:11,color:"rgba(240,234,214,0.35)",margin:"0 0 4px"},S.mo+"월 잡어 매출"),t(null,{fontSize:17,fontWeight:600,color:"#F0EAD6",margin:0},fmt(fishS))])
@@ -476,21 +476,20 @@ function renderDash(page,recvMap,ms){
   page.appendChild(d("card",null,[t(null,{fontSize:11,color:"rgba(240,234,214,0.35)",margin:"0 0 4px"},S.mo+"월 장어 판매량"),t(null,{fontSize:19,fontWeight:600,color:"#F0EAD6",margin:0},eelKg.toLocaleString()+"kg")]));
 
   // 미수금 (음수는 "줘야 할 돈"으로 별도 표시)
-  var totalRecv=S.cos.reduce(function(a,c){return a+(recvMap[cs(c.id)]||0);},0);
+  // 미수금 총합: 받을돈(양수)만, 목록은 많은순 정렬
+  var totalRecvPos=S.cos.reduce(function(a,c){var v=recvMap[cs(c.id)]||0;return a+(v>0?v:0);},0);
   var recvItems=[];
-  S.cos.forEach(function(c){
-    var v=recvMap[cs(c.id)]||0;
-    if(v===0)return;
-    var color=v>0?"#E05C5C":"#5B8DEF";
-    var label=v>0?fmt(v):fmt(Math.abs(v))+" (줘야할돈)";
-    recvItems.push(d("li",null,[sp(null,{color:"#F0EAD6"},c.name),sp(null,{color:color,fontWeight:600},label)]));
+  var recvSorted=S.cos.map(function(c){return{name:c.name,v:recvMap[cs(c.id)]||0};}).filter(function(r){return r.v!==0;}).sort(function(a,b){return b.v-a.v;});
+  recvSorted.forEach(function(r){
+    var color=r.v>0?"#E05C5C":"#5B8DEF";
+    var label=r.v>0?fmt(r.v):fmt(Math.abs(r.v))+" (줘야할돈)";
+    recvItems.push(d("li",null,[sp(null,{color:"#F0EAD6"},r.name),sp(null,{color:color,fontWeight:600},label)]));
   });
   if(!recvItems.length)recvItems=[t(null,{fontSize:13,color:"rgba(240,234,214,0.35)",textAlign:"center",margin:"5px 0"},"미수금 없음")];
-  var totalColor=totalRecv>0?"#E05C5C":totalRecv<0?"#5B8DEF":"#4CAF82";
   page.appendChild(d("card-red",null,[
     d(null,{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},[
       t("sec-title",{margin:0},"미수금 현황"),
-      badge(totalRecv>0?"rgba(224,92,92,0.12)":totalRecv<0?"rgba(91,141,239,0.12)":"rgba(76,175,130,0.12)",totalColor,totalRecv>0?"rgba(224,92,92,0.3)":totalRecv<0?"rgba(91,141,239,0.3)":"rgba(76,175,130,0.3)",totalRecv>0?fmt(totalRecv):totalRecv<0?fmt(Math.abs(totalRecv))+" (줘야할돈)":"정산완료")
+      badge("rgba(224,92,92,0.12)","#E05C5C","rgba(224,92,92,0.3)",totalRecvPos>0?fmt(totalRecvPos):"정산완료")
     ]),
     ...recvItems
   ]));
@@ -557,11 +556,14 @@ function renderCo(page,recvMap,ms){
   function monthGrid(item,color){
     return MONTHS.map(function(_,i){
       var s2=S.yr+"-"+String(i+1).padStart(2,"0");
-      var kg=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.item===item&&t.date&&t.date.startsWith(s2);}).reduce(function(a,t){return a+t.qty;},0);
-      return d(null,{width:"calc(25% - 3px)",background:"#1C2333",borderRadius:8,padding:"6px 3px",textAlign:"center",border:"1px solid rgba(255,255,255,0.08)"},[
-        t(null,{fontSize:10,color:"rgba(240,234,214,0.35)",margin:"0 0 2px"},i+1+"월"),
+      var isCurMo=(i+1===S.mo);
+      var kg=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.item===item&&t.date&&t.date.startsWith(s2)&&t.qty>0;}).reduce(function(a,t){return a+t.qty;},0);
+      var cell=d(null,{width:"calc(25% - 3px)",background:isCurMo?"rgba(201,168,76,0.15)":"#1C2333",borderRadius:8,padding:"6px 3px",textAlign:"center",border:"1px solid "+(isCurMo?"rgba(201,168,76,0.5)":"rgba(255,255,255,0.08)"),cursor:"pointer"},[
+        t(null,{fontSize:10,color:isCurMo?"#E8C97A":"rgba(240,234,214,0.35)",margin:"0 0 2px"},i+1+"월"),
         t(null,{fontSize:12,fontWeight:600,color:color,margin:0},kg>0?kg.toFixed(1)+"kg":"0kg")
       ]);
+      (function(mo){cell.onclick=function(){S.mo=mo;render();};})(i+1);
+      return cell;
     });
   }
   page.appendChild(d("card",null,[t("sec-title",null,"월별 장어 판매량 (kg)"),d(null,{display:"flex",flexWrap:"wrap",gap:"3px"},monthGrid("장어","#E8C97A"))]));
@@ -600,16 +602,25 @@ function renderCo(page,recvMap,ms){
 
 function renderCal(ms){
   var fd=new Date(S.yr,S.mo-1,1).getDay(), dim=new Date(S.yr,S.mo,0).getDate(), dd={};
-  S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.type==="납품"&&t.date&&t.date.startsWith(ms);}).forEach(function(t){
+  S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.type==="납품"&&t.date&&t.date.startsWith(ms)&&t.qty>0;}).forEach(function(t){
     var day=parseInt(t.date.split("-")[2]);
     if(!dd[day])dd[day]={eel:0,fish:0};
     if(t.item==="장어")dd[day].eel+=t.qty;
     else if(t.item==="잡어")dd[day].fish+=t.qty;
   });
   var cells=[];for(var i=0;i<fd;i++)cells.push(null);for(var day=1;day<=dim;day++)cells.push(day);
+  // 월 선택 버튼
+  var moPicker=d(null,{display:"flex",flexWrap:"wrap",gap:"3px",marginBottom:8});
+  var MONTHS2=["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+  MONTHS2.forEach(function(_,i){
+    var active=(i+1===S.mo);
+    var btn=d(null,{padding:"3px 7px",borderRadius:6,fontSize:11,cursor:"pointer",background:active?"rgba(201,168,76,0.2)":"transparent",border:"1px solid "+(active?"rgba(201,168,76,0.5)":"rgba(255,255,255,0.08)"),color:active?"#E8C97A":"rgba(240,234,214,0.45)",fontWeight:active?600:400},[String(i+1)+"월"]);
+    (function(mo){btn.onclick=function(){S.mo=mo;render();};})(i+1);
+    moPicker.appendChild(btn);
+  });
   var legend=d(null,{display:"flex",gap:"12px",marginBottom:6,fontSize:11},[
-    d(null,{display:"flex",alignItems:"center",gap:3},[d(null,{width:9,height:9,borderRadius:2,background:"rgba(201,168,76,0.7)"}),sp(null,{color:"rgba(240,234,214,0.55)"},"장어")]),
-    d(null,{display:"flex",alignItems:"center",gap:3},[d(null,{width:9,height:9,borderRadius:2,background:"rgba(91,141,239,0.7)"}),sp(null,{color:"rgba(240,234,214,0.55)"},"잡어")])
+    d(null,{display:"flex",alignItems:"center",gap:3},[d(null,{width:9,height:9,borderRadius:2,background:"rgba(201,168,76,0.7)"}),sp(null,{color:"#E8C97A",fontWeight:600},"장어")]),
+    d(null,{display:"flex",alignItems:"center",gap:3},[d(null,{width:9,height:9,borderRadius:2,background:"rgba(91,141,239,0.7)"}),sp(null,{color:"#5B8DEF",fontWeight:600},"잡어")])
   ]);
   var grid=d(null,{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"2px"});
   ["일","월","화","수","목","금","토"].forEach(function(dow){grid.appendChild(t(null,{textAlign:"center",fontSize:10,color:"rgba(240,234,214,0.35)",padding:"2px 0"},dow));});
@@ -623,7 +634,7 @@ function renderCal(ms){
     if(hF)cell.appendChild(t(null,{fontSize:9,color:"#5B8DEF",margin:0,lineHeight:1.1},data.fish.toFixed(1)+"k"));
     grid.appendChild(cell);
   });
-  return d("card",null,[t("sec-title",null,S.mo+"월 일별 달력"),legend,grid]);
+  return d("card",null,[t("sec-title",null,S.mo+"월 일별 달력"),moPicker,legend,grid]);
 }
 
 function renderEntry(page){
