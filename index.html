@@ -214,7 +214,11 @@ function parseImp(){
 
 
 // ── 로그인 화면 ──────────────────────────────────────
-function toFakeEmail(id){return id.trim().toLowerCase()+"@hongjangeo.app";}
+function toFakeEmail(id){
+  // 영문/숫자/밑줄 외 문자는 인코딩 (한글 등 대응)
+  var safe=encodeURIComponent(id.trim().toLowerCase()).replace(/%/g,"_").replace(/[^a-z0-9_]/g,"_");
+  return safe+"@hongjangeo.app";
+}
 function renderLogin(){
   var app=document.getElementById("app");
   app.innerHTML="";
@@ -263,7 +267,8 @@ function renderLogin(){
     var id=idInpEl.value.trim(),pw=pwInp.value;
     if(!id||!pw){errMsg.textContent="아이디와 비밀번호를 입력하세요.";return;}
     loginBtn.textContent="로그인 중...";loginBtn.disabled=true;
-    AUTH.signInWithEmailAndPassword(toFakeEmail(id),pw)
+    var loginEmail=id.includes("@")?id:toFakeEmail(id);
+    AUTH.signInWithEmailAndPassword(loginEmail,pw)
       .then(function(){errMsg.textContent="";})
       .catch(function(e){
         errMsg.textContent=e.code==="auth/wrong-password"||e.code==="auth/user-not-found"||e.code==="auth/invalid-credential"?"아이디 또는 비밀번호가 올바르지 않습니다.":"로그인 실패: "+e.message;
