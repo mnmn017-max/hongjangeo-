@@ -128,8 +128,14 @@ function updTx(v){S.txs=v;saveToFb(S.cos,v);}
 // 미수금잔액 = 그대로 반영 (음수면 우리가 줘야 할 돈)
 function getRecv(){
   var m={};
-  S.cos.forEach(function(c){m[cs(c.id)]=0;});
-  S.txs.forEach(function(t){if(m[cs(t.companyId)]!==undefined)m[cs(t.companyId)]+=t.amount;});
+  var supMap={};
+  S.cos.forEach(function(c){m[cs(c.id)]=0;supMap[cs(c.id)]=c.supplier||false;});
+  S.txs.forEach(function(t){
+    if(m[cs(t.companyId)]!==undefined){
+      // 공급업체는 부호 반전 (받은납품=줘야할돈, 준돈=미수감소)
+      m[cs(t.companyId)]+=supMap[cs(t.companyId)]?-t.amount:t.amount;
+    }
+  });
   return m;
 }
 
@@ -514,28 +520,69 @@ function renderDash(page,recvMap,ms){
 function renderCo(page,recvMap,ms){
   var addBtn=h("button",null,{padding:"8px 14px",border:"1px solid rgba(201,168,76,0.35)",borderRadius:10,background:"transparent",color:"#E8C97A",fontWeight:500,fontSize:13},"+ 추가");
   addBtn.onclick=function(){var n=prompt("업체명 입력");if(n&&n.trim()){updCo(S.cos.concat([{id:Date.now(),name:n.trim()}]));render();}};
-  var si=inpEl("text","inp",{marginBottom:10},S.search,function(){S.search=this.value;render();});
+  var si=inpEl("text","inp",{marginBottom:10},S.search);
   si.placeholder="🔍 업체명 검색...";
-  var filtered=S.cos.filter(function(c){return c.name&&c.name.includes(S.search);});
-  var coItems=filtered.length===0?[d("eb",null,[S.cos.length===0?"등록된 업체가 없습니다":'"'+S.search+'" 없음'])]:
-    filtered.map(function(c){
+  si.className=(si.className||"")+" co-search";
+  si.addEventListener("compositionstart",function(){si._composing=true;});
+  si.addEventListener("compositionend",function(){
+    si._composing=false;
+    S.search=si.value;
+    var el=document.getElementById("co-list");
+    if(el)updateCoList(el,S.search);
+  });
+  si.oninput=function(){
+    if(si._composing)return;
+    S.search=si.value;
+    var el=document.getElementById("co-list");
+    if(el)updateCoList(el,S.search);
+  };
+  si.onkeydown=function(e){e.stopPropagation();};
+
+  function makeCoItems(q){
+    var filtered=S.cos.filter(function(c){return c.name&&c.name.includes(q);});
+    if(filtered.length===0){
+      var msg=document.createElement("div");
+      msg.className="eb";msg.textContent=S.cos.length===0?"등록된 업체가 없습니다":'"'+q+'" 없음';
+      return [msg];
+    }
+    return filtered.map(function(c){
       var active=cs(S.cid)===cs(c.id);
       var recv=recvMap[cs(c.id)]||0;
       var recvBg=recv>0?"rgba(224,92,92,0.12)":recv<0?"rgba(91,141,239,0.12)":"rgba(76,175,130,0.12)";
       var recvCol=recv>0?"#E05C5C":recv<0?"#5B8DEF":"#4CAF82";
       var recvBor=recv>0?"rgba(224,92,92,0.3)":recv<0?"rgba(91,141,239,0.3)":"rgba(76,175,130,0.3)";
       var recvTxt=recv>0?fmt(recv)+" 미수":recv<0?fmt(Math.abs(recv))+" 줘야할돈":"정산완료";
+      var isSupplier=c.supplier||false;
+      var supBtn=document.createElement("button");
+      supBtn.style.cssText="padding:3px 8px;border:none;border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;margin-left:4px;background:"+(isSupplier?"rgba(91,141,239,0.2)":"rgba(255,255,255,0.05)")+";color:"+(isSupplier?"#5B8DEF":"rgba(240,234,214,0.3)")+";border:1px solid "+(isSupplier?"rgba(91,141,239,0.4)":"rgba(255,255,255,0.08)")+";";
+      supBtn.textContent=isSupplier?"공급업체":"일반";
+      supBtn.onclick=function(e){
+        e.stopPropagation();
+        var updated=S.cos.map(function(x){return cs(x.id)===cs(c.id)?Object.assign({},x,{supplier:!isSupplier}):x;});
+        updCo(updated);render();
+      };
       var row=d("li",{cursor:"pointer",background:active?"rgba(201,168,76,0.1)":"transparent",borderRadius:8,padding:"9px 8px",margin:"2px 0",border:active?"1px solid rgba(201,168,76,0.35)":"1px solid transparent"},[
-        sp(null,{color:"#F0EAD6",fontWeight:active?600:400},c.name),
+        d(null,{display:"flex",alignItems:"center",gap:4},[
+          sp(null,{color:"#F0EAD6",fontWeight:active?600:400},c.name),
+          supBtn
+        ]),
         badge(recvBg,recvCol,recvBor,recvTxt)
       ]);
       row.onclick=function(){S.cid=active?null:c.id;render();};
       return row;
     });
+  }
+  function updateCoList(el,q){
+    while(el.firstChild)el.removeChild(el.firstChild);
+    makeCoItems(q).forEach(function(item){el.appendChild(item);});
+  }
+  var listWrap=document.createElement("div");listWrap.id="co-list";
+  makeCoItems(S.search).forEach(function(item){listWrap.appendChild(item);});
+
   page.appendChild(d("card",null,[
     d(null,{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12},[t("sec-title",{margin:0},"업체 목록"),addBtn]),
     S.cos.length>0?si:h("span"),
-    ...coItems
+    listWrap
   ]));
   if(!S.cid)return;
   var comp=S.cos.find(function(c){return cs(c.id)===cs(S.cid);});
@@ -544,10 +591,14 @@ function renderCo(page,recvMap,ms){
   var cSales=S.txs.filter(function(t){return cs(t.companyId)===cs(S.cid)&&t.type==="납품"&&t.date&&t.date.startsWith(ms);}).reduce(function(a,t){return a+t.amount;},0);
   var recvColor=cRecv>0?"#E05C5C":cRecv<0?"#5B8DEF":"#4CAF82";
   var recvLabel=cRecv>0?fmt(cRecv):cRecv<0?fmt(Math.abs(cRecv))+" (줘야할돈)":fmt(0);
+  var isCompSupplier=comp.supplier||false;
   page.appendChild(d("card-gold",null,[
-    t("sec-title",null,comp.name),
+    d(null,{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},[
+      t("sec-title",{margin:0},comp.name),
+      isCompSupplier?badge("rgba(91,141,239,0.15)","#5B8DEF","rgba(91,141,239,0.35)","공급업체"):badge("rgba(201,168,76,0.1)","#E8C97A","rgba(201,168,76,0.25)","일반업체")
+    ]),
     d("row2",{marginBottom:0},[
-      d("mc",null,[t(null,{fontSize:11,color:"rgba(240,234,214,0.35)",margin:"0 0 4px"},"미수금"),t(null,{fontSize:17,fontWeight:600,color:recvColor,margin:0},recvLabel)]),
+      d("mc",null,[t(null,{fontSize:11,color:"rgba(240,234,214,0.35)",margin:"0 0 4px"},isCompSupplier?"줘야할돈":"미수금"),t(null,{fontSize:17,fontWeight:600,color:recvColor,margin:0},recvLabel)]),
       d("mc",null,[t(null,{fontSize:11,color:"rgba(240,234,214,0.35)",margin:"0 0 4px"},S.mo+"월 매출"),t(null,{fontSize:17,fontWeight:600,color:"#E8C97A",margin:0},fmt(cSales))])
     ])
   ]));
