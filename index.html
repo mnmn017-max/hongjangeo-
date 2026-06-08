@@ -90,6 +90,24 @@ var S={
 var saveT=null;
 function today(){return new Date().toISOString().slice(0,10);}
 function fmt(n){return(n||0).toLocaleString()+"원";}
+function fmtNum(n){var v=parseInt(String(n).replace(/[^0-9]/g,""))||0;return v===0?"":v.toLocaleString("ko-KR");}
+function parseComma(s){return parseInt(String(s).replace(/[^0-9]/g,""))||0;}
+function makeCommaInput(cls,val,onChange){
+  var el=document.createElement("input");
+  el.type="text";el.inputMode="numeric";el.className=cls;
+  el.value=val?fmtNum(val):"";
+  el.oninput=function(){
+    var raw=this.value.replace(/[^0-9]/g,"");
+    var num=parseInt(raw)||0;
+    var cursor=this.selectionStart;
+    var prevLen=this.value.length;
+    this.value=num>0?num.toLocaleString("ko-KR"):"";
+    var diff=this.value.length-prevLen;
+    this.selectionStart=this.selectionEnd=Math.max(0,cursor+diff);
+    onChange(num);
+  };
+  return el;
+}
 function cs(id){return String(id||"");}
 function gName(id){var c=S.cos.find(function(c){return cs(c.id)===cs(id);});return c?c.name:"?";}
 function pNum(v){
@@ -715,16 +733,16 @@ function renderEntry(page){
   var ip=d(null,{display:"flex",flexWrap:"wrap"});
   ["장어","잡어"].forEach(function(it){var b=h("span","pill"+(S.tItem===it?" on":""));b.textContent=it;b.onclick=function(){S.tItem=it;render();};ip.appendChild(b);});
   var fi=S.tItem==="잡어"?d("fd",null,[h("label","fl",null,["어종명"]),inpEl("text","inp",null,S.tFish,function(){S.tFish=this.value;})]):h("span");
-  var qi=inpEl("number","inp",null,S.tQty,function(){S.tQty=this.value;});qi.placeholder="0";
-  var pi=inpEl("number","inp",null,S.tPrice,function(){S.tPrice=this.value;});pi.placeholder="0";
-  var tp=parseFloat(S.tQty)>0&&parseFloat(S.tPrice)>0?
-    d(null,{background:"rgba(201,168,76,0.12)",border:"1px solid rgba(201,168,76,0.35)",borderRadius:10,padding:"9px 14px",marginBottom:10,display:"flex",justifyContent:"space-between"},[sp(null,{fontSize:13,color:"rgba(240,234,214,0.55)"},"총 납품 금액"),sp(null,{fontSize:17,fontWeight:700,color:"#E8C97A"},fmt(parseFloat(S.tQty)*parseFloat(S.tPrice)))]):h("span");
+  var qi=makeCommaInput("inp",S.tQty,function(v){S.tQty=String(v);});qi.placeholder="0";
+  var pi=makeCommaInput("inp",S.tPrice,function(v){S.tPrice=String(v);});pi.placeholder="0";
+  var tp=parseComma(S.tQty)>0&&parseComma(S.tPrice)>0?
+    d(null,{background:"rgba(201,168,76,0.12)",border:"1px solid rgba(201,168,76,0.35)",borderRadius:10,padding:"9px 14px",marginBottom:10,display:"flex",justifyContent:"space-between"},[sp(null,{fontSize:13,color:"rgba(240,234,214,0.55)"},"총 납품 금액"),sp(null,{fontSize:17,fontWeight:700,color:"#E8C97A"},fmt(parseComma(S.tQty)*parseComma(S.tPrice)))]):h("span");
   var tMsg=S.tMsg?t(null,{fontSize:13,color:S.tMsg.startsWith("✓")?"#4CAF82":"#E05C5C",marginTop:6,textAlign:"center"},S.tMsg):h("span");
   var rb=h("button","btn-gold",null,"납품 등록");
   rb.onclick=function(){
     if(!S.tComp||!S.tQty||!S.tPrice){S.tMsg="모든 항목을 입력해주세요.";render();return;}
     var comp=S.cos.find(function(c){return c.name===S.tComp;});if(!comp)return;
-    var qty=parseFloat(S.tQty),price=parseFloat(S.tPrice);if(isNaN(qty)||isNaN(price))return;
+    var qty=parseComma(S.tQty),price=parseComma(S.tPrice);if(!qty||!price)return;
     updTx(S.txs.concat([{id:Date.now(),date:S.tDate,companyId:comp.id,type:"납품",item:S.tItem,fish:S.tItem==="잡어"?S.tFish:"",qty:qty,price:price,amount:qty*price}]));
     S.tMsg="✓ 등록 완료";S.tQty="";S.tPrice="";S.tFish="";render();
     setTimeout(function(){S.tMsg="";render();},2500);
@@ -753,7 +771,7 @@ function renderEntry(page){
   dc.oninput=function(){S.dComp=this.value;};
   dc.onchange=function(){S.dComp=this.value;};
   document.body.appendChild(dcList);
-  var da=inpEl("number","inp",null,S.dAmt,function(){S.dAmt=this.value;});da.placeholder="0";
+  var da=makeCommaInput("inp",S.dAmt,function(v){S.dAmt=String(v);});da.placeholder="0";
       // 음수 토글
   var negBtn=h("button",null,{padding:"8px 14px",border:"1px solid "+(S.dNeg?"rgba(91,141,239,0.5)":"rgba(255,255,255,0.14)"),borderRadius:10,background:S.dNeg?"rgba(91,141,239,0.15)":"transparent",color:S.dNeg?"#5B8DEF":"rgba(240,234,214,0.55)",fontSize:12,fontWeight:S.dNeg?600:400,marginTop:4,width:"100%"},S.dNeg?"💙 준 돈 (우리가 지불)":"💛 받은 돈 (우리가 수금)");
   negBtn.onclick=function(){S.dNeg=!S.dNeg;render();};
@@ -762,7 +780,7 @@ function renderEntry(page){
   db.onclick=function(){
     if(!S.dComp||!S.dAmt){S.dMsg="업체와 금액을 입력해주세요.";render();return;}
     var comp=S.cos.find(function(c){return c.name===S.dComp;});if(!comp)return;
-    var amt=parseFloat(S.dAmt);if(isNaN(amt)||amt<=0)return;
+    var amt=parseComma(S.dAmt);if(amt<=0)return;
     // 받은 돈(기본): 미수금 감소(-), 준 돈(토글): 미수금 증가(+)
     var finalAmt=S.dNeg?amt:-amt;
     updTx(S.txs.concat([{id:Date.now(),date:S.dDate,companyId:comp.id,type:"입금",item:"",fish:"",qty:0,price:0,amount:finalAmt}]));
