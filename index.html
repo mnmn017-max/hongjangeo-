@@ -186,12 +186,16 @@ function parseImp(){
       var totalAmt=totalRaw!==0?totalRaw:(qty>0&&price>0?qty*price:0);
       // 입금액: 양수=우리가준돈(+미수금감소방향반전), 음수/()=우리가받은돈(-미수금)
       var depositRaw=pNum(cols[5]);
-      var fishAmt=Math.abs(pNum(cols[6])), fishQty=cols[7]?parseFloat(cols[7].replace(/[^0-9.]/g,""))||0:0;
+      var fishAmtRaw=pNum(cols[6]);
+      var fishQty=cols[7]?parseFloat(cols[7].replace(/[^0-9.]/g,""))||0:0;
       var fishPrice=Math.abs(pNum(cols[8])), fishName=(cols[9]||"").trim().split(/[\s(]/)[0];
-      // 장어 납품: 총단가 부호 그대로 반영
-      if(qty>0&&price>0&&totalAmt!==0)nTxs.push({id:"tx_"+yr+"_"+li+"_e_"+Date.now()+"_"+Math.random().toString(36).slice(2),date:date,companyId:comp.id,type:"납품",item:"장어",fish:"",qty:qty,price:price,amount:totalAmt});
-      // 잡어 납품: 항상 양수
-      if(fishAmt>0&&fishQty>0&&fishName&&fishName!=="0")nTxs.push({id:"tx_"+yr+"_"+li+"_f_"+Date.now()+"_"+Math.random().toString(36).slice(2),date:date,companyId:comp.id,type:"납품",item:"잡어",fish:fishName,qty:fishQty,price:fishPrice,amount:fishAmt});
+      // 잡어 qty: amount 부호 따라감
+      var fishQtyFinal=fishAmtRaw<0?-Math.abs(fishQty):Math.abs(fishQty);
+      // 장어 납품: 총단가 부호 그대로, qty도 부호 따라감
+      var eelQtyFinal=totalAmt<0?-Math.abs(qty):Math.abs(qty);
+      if(qty>0&&price>0&&totalAmt!==0)nTxs.push({id:"tx_"+yr+"_"+li+"_e_"+Date.now()+"_"+Math.random().toString(36).slice(2),date:date,companyId:comp.id,type:"납품",item:"장어",fish:"",qty:eelQtyFinal,price:price,amount:totalAmt});
+      // 잡어 납품: 부호 그대로 (음수=꼼장어 등 우리가 받는 것)
+      if(fishAmtRaw!==0&&fishQty>0&&fishName&&fishName!=="0")nTxs.push({id:"tx_"+yr+"_"+li+"_f_"+Date.now()+"_"+Math.random().toString(36).slice(2),date:date,companyId:comp.id,type:"납품",item:"잡어",fish:fishName,qty:fishQtyFinal,price:fishPrice,amount:fishAmtRaw});
       // 입금액: 양수=준돈(+), 음수=받은돈(-)
       // 미수금 로직: 받을돈이면 입금받으면 미수금 감소(-), 줘야할돈이면 입금하면 미수금 증가(+)
       // 엑셀에서 양수입금=우리가준돈=줘야할돈감소=미수금+, 음수입금=우리가받은돈=받을돈감소=미수금-
@@ -699,7 +703,15 @@ function renderEntry(page){
 
   // 납품
   var di=inpEl("date","inp",null,S.tDate,function(){S.tDate=this.value;});
-  var cs2=selEl("sel",S.tComp,[{v:"",t:"업체 선택"}].concat(S.cos.map(function(c){return{v:c.name,t:c.name};})),function(){S.tComp=this.value;});
+  // 납품탭 업체 검색
+  var cs2=document.createElement("input");
+  cs2.className="inp"; cs2.placeholder="업체명 검색..."; cs2.value=S.tComp;
+  var cs2List=document.createElement("datalist"); cs2List.id="cs2-list";
+  S.cos.forEach(function(c){var o=document.createElement("option");o.value=c.name;cs2List.appendChild(o);});
+  cs2.setAttribute("list","cs2-list");
+  cs2.oninput=function(){S.tComp=this.value;};
+  cs2.onchange=function(){S.tComp=this.value;};
+  document.body.appendChild(cs2List);
   var ip=d(null,{display:"flex",flexWrap:"wrap"});
   ["장어","잡어"].forEach(function(it){var b=h("span","pill"+(S.tItem===it?" on":""));b.textContent=it;b.onclick=function(){S.tItem=it;render();};ip.appendChild(b);});
   var fi=S.tItem==="잡어"?d("fd",null,[h("label","fl",null,["어종명"]),inpEl("text","inp",null,S.tFish,function(){S.tFish=this.value;})]):h("span");
@@ -732,7 +744,15 @@ function renderEntry(page){
 
   // 입금
   var dd=inpEl("date","inp",null,S.dDate,function(){S.dDate=this.value;});
-  var dc=selEl("sel",S.dComp,[{v:"",t:"업체 선택"}].concat(S.cos.map(function(c){return{v:c.name,t:c.name};})),function(){S.dComp=this.value;});
+  // 입금탭 업체 검색
+  var dc=document.createElement("input");
+  dc.className="inp"; dc.placeholder="업체명 검색..."; dc.value=S.dComp;
+  var dcList=document.createElement("datalist"); dcList.id="dc-list";
+  S.cos.forEach(function(c){var o=document.createElement("option");o.value=c.name;dcList.appendChild(o);});
+  dc.setAttribute("list","dc-list");
+  dc.oninput=function(){S.dComp=this.value;};
+  dc.onchange=function(){S.dComp=this.value;};
+  document.body.appendChild(dcList);
   var da=inpEl("number","inp",null,S.dAmt,function(){S.dAmt=this.value;});da.placeholder="0";
       // 음수 토글
   var negBtn=h("button",null,{padding:"8px 14px",border:"1px solid "+(S.dNeg?"rgba(91,141,239,0.5)":"rgba(255,255,255,0.14)"),borderRadius:10,background:S.dNeg?"rgba(91,141,239,0.15)":"transparent",color:S.dNeg?"#5B8DEF":"rgba(240,234,214,0.55)",fontSize:12,fontWeight:S.dNeg?600:400,marginTop:4,width:"100%"},S.dNeg?"💙 준 돈 (우리가 지불)":"💛 받은 돈 (우리가 수금)");
